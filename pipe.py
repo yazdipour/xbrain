@@ -184,13 +184,13 @@ class OpenAIHelper:
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant for summerizing webpage contents and video transcripts."
+                    "You are a helpful assistant to help you create TLDR summaries of content from various sources like books, webpage articles, and YouTube transcripts."
                 ),
             },
         ]
 
     def get_user_prompt(self, content: str):
-        return {"role": "user", "content": (f": Summerize this page: {content}")}
+        return {"role": "user", "content": (f"Create a TLDR summary for the following content, capturing all important information: {content}")}
 
     def get_summary(self, text):
         prompt = self.get_system_prompt()
