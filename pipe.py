@@ -12,7 +12,7 @@ def handler(pd: "pipedream"):
     global openapi_key
     openapi_key = pd.inputs["openai"]["$auth"]["api_key"]
     if event["from"]["username"] != "theshahriar":
-        return
+        raise ValueError("Not authorized")
     msg = event["text"]
     subject, html = create_content(msg)
     return {
@@ -25,9 +25,14 @@ def handler(pd: "pipedream"):
 def create_content(
     user_msg="/add Lorem Ipsum is simply dummy text of the printing and typesetting industry.",
 ):
-    # split the message into command and content
-    command = user_msg.split(" ")[0]
-    content = " ".join(user_msg.split(" ")[1:])
+    # check if the user_msg starts with a command '/'
+    if user_msg[0] != "/":
+        command = "/add"
+        content = user_msg
+    else:
+        command = user_msg.split(" ")[0]
+        content = " ".join(user_msg.split(" ")[1:])
+
     if content == "":
         raise ValueError("Content is empty")
     # check if the command is valid
@@ -218,9 +223,8 @@ class YoutubeTranscriptApiHelper:
         if video_id:
             transcript = self.get_transcript_from_id(video_id)
             if transcript:
-                for entry in transcript:
-                    print(entry["text"])
+                return " ".join([entry["text"] for entry in transcript])
             else:
-                print("No transcript found for the video.")
+                raise Exception("No transcript found for the video.")
         else:
-            print("Invalid YouTube URL.")
+            raise Exception("Invalid YouTube URL.")
