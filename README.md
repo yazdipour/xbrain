@@ -6,8 +6,8 @@ Purpose: Telegram Bot (sending text, url, youtube video) -> OpenAI Analysis -> S
 
 ## TODO
 
-[ ] Twitter Thread Reader
-[ ] /ask command
-[ ] Book Reader!
-[ ] Set Token limit
-[ ] OpenAI Token Getter
+* [ ] Twitter Thread Reader
+* [ ] /ask command
+* [ ] Book Reader!
+* [ ] Set Token limit
+* [ ] OpenAI Token Getter
