@@ -1,0 +1,31 @@
+digraph MessageFlow {
+    // node [shape=rectangle, style=filled];
+    User -> TelegramServer [label="message"];
+    subgraph cluster_PipeDream{
+        node [style=filled,color=green];
+        style=dashed;
+        color=gray;
+        label="PipeDream Service";
+
+        checkType [shape=diamond];
+        checkCommand [shape=diamond];
+    
+        pipeTelegram -> checkType;
+        checkType -> GetTranscript [label="youtube"];  
+        checkType -> GetHTML [label="URL"];  
+        checkType -> PipePython [label="text"];
+        
+        GetHTML -> PipePython;
+        GetTranscript -> PipePython;
+        PipePython -> checkCommand;
+        checkCommand -> pipeEmail [label="/add"];
+    }
+    
+    OpenAI [shape=square];
+    checkCommand -> OpenAI [label="/sum"];
+    checkCommand -> OpenAI [label="/ask"];
+    TelegramServer -> pipeTelegram;  
+    OpenAI -> pipeEmail;
+    
+    pipeEmail -> "InstaPaper/Pocket/Matter" [label="HTML"];
+}
