@@ -42,7 +42,9 @@ def create_content(
     elif command == "/book":
         subject, html = book(content)
         return subject, html
-    # if command == "/add":
+    if command == "/thread":
+        subject, html = add_twitter_thread_url(content)
+        return subject, html
     else:
         # add command to the content if it is not /add
         if command != "/add":
@@ -73,8 +75,8 @@ def sum(content):
         subject, html = sum_webpage_url(content)
         return subject, html
     else:
-        subject = content.split("\n")[0]
         html = get_summarized(content)
+        subject = content.split("\n")[0]
         return subject, html
 
 
@@ -92,25 +94,34 @@ def add_webpage_url(url):
     return subject, f"{html}<br><a href='{url}'>URL: {url}</a>"
 
 
+def add_twitter_thread_url(url):
+    # convert twitter url to threadreaderapp url
+    twit_id = url.split("/")[-1]
+    url = f"https://threadreaderapp.com/thread/{twit_id}"
+    html = download_html(url)
+    html = f"<html>{html}<a href='{url}'>URL: {url}</a></html>"
+    subject = get_pagetitle(url, html)
+    return "[TWT]" + subject, html
+
+
 def add_youtube_url(url):
     subject = get_pagetitle(url, "")
     transcript = get_youtube_transcript(url)
-    html = f"<html><a href='{url}'>URL: {url}</a><br>{transcript}</html>"
+    html = f"<html><br>{transcript}<a href='{url}'>URL: {url}</a></html>"
     return subject, html
 
 
 def sum_youtube_url(url):
-    subject = get_pagetitle(url, "")
     transcript = get_youtube_transcript(url)
     if "Error:" not in transcript:
         transcript = get_summarized(transcript)
     html = f"<html><a href='{url}'>URL: {url}</a><br>{transcript}</html>"
+    subject = get_pagetitle(url, "")
     return "[SUM]" + subject, html
 
 
 def sum_webpage_url(url):
     html = download_html(url)
-    subject = get_pagetitle(url, html)
     body = html.split("<body>")[1].split("</body>")[0]
     # remove all the svg, img, script, style, link, meta, noscript
     body = re.sub(r"<svg.*?</svg>", "", body, flags=re.DOTALL)
@@ -121,14 +132,17 @@ def sum_webpage_url(url):
     body = re.sub(r"<meta.*?>", "", body, flags=re.DOTALL)
     body = re.sub(r"<noscript.*?</noscript>", "", body, flags=re.DOTALL)
     body = get_summarized(body)
+    subject = get_pagetitle(url, html)
     return "[SUM]" + subject, f"<html><a href='{url}'>URL: {url}</a><br>{body}</html>"
 
 
 def content_type(content):
     # url is from youtube or not
-    if "youtube.com" in content:
+    if "youtu.be" in content or "youtube.com" in content:
         return "youtube"
-    # starts with http or https
+    elif "twitter.com" in content:
+        return "twitter"
+        # starts with http or https
     elif re.match(r"^https?://", content):
         return "webpage"
     else:
@@ -145,8 +159,7 @@ def get_pagetitle(url, html):
 
 
 def download_html(url):
-    html = requests.get(url).text
-    return html
+    return requests.get(url).text
 
 
 def get_summarized(text, openai_api_key: str = ""):
