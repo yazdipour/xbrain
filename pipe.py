@@ -1,10 +1,14 @@
 # pipedream add-package youtube-transcript-api
+# pipedream add-package beautifulsoup4
 
 from typing import List, Dict
 from youtube_transcript_api import YouTubeTranscriptApi
 import re
 import requests
 import openai
+from bs4 import BeautifulSoup
+
+_url = ""
 
 
 def handler(pd: "pipedream"):
@@ -14,17 +18,16 @@ def handler(pd: "pipedream"):
     if event["from"]["username"] != "theshahriar":
         raise ValueError("Not authorized")
     msg = event["text"]
-    subject, html = create_content(msg)
+    subject, _url, html = create_content(msg)
     return {
         "subject": f"[XBrain] {subject}",
         "text": f"Text: [XBrain] {subject}",
+        "url": _url,
         "html": html,
     }
 
 
-def create_content(
-    user_msg="/add Lorem Ipsum is simply dummy text of the printing and typesetting industry.",
-):
+def create_content(user_msg):
     # check if the user_msg starts with a command '/'
     if user_msg[0] != "/":
         command = "/add"
@@ -32,25 +35,23 @@ def create_content(
     else:
         command = user_msg.split(" ")[0]
         content = " ".join(user_msg.split(" ")[1:])
-
     if content == "":
         raise ValueError("Content is empty")
-    # check if the command is valid
-    if command == "/sum":
-        subject, html = sum(content)
-        return subject, html
+
+    # content is the url unless it is a text
+    global _url
+    _url = content
+    if command == "/sum" or command == "/tldr" or command == "/ask":
+        subject, html = gpt(command, content)
     elif command == "/book":
         subject, html = book(content)
-        return subject, html
     if command == "/thread":
         subject, html = add_twitter_thread_url(content)
-        return subject, html
     else:
-        # add command to the content if it is not /add
         if command != "/add":
             content = f"{command} {content}"
         subject, html = add(content)
-        return subject, html
+    return subject, _url, html
 
 
 def add(content):
@@ -66,42 +67,47 @@ def add(content):
         return subject, f"<html>{content}</html>"
 
 
-def sum(content):
+def gpt(command, content):
     type = content_type(content)
+    subject = content.split("\n")[0]
+
     if type == "youtube":
-        subject, html = sum_youtube_url(content)
-        return subject, html
+        # content is combination of youtube url and text or just youtube url
+        # seperate the youtube url and text using regex
+        url = re.findall(r"(https?://\S+)", content)[0]
+        prompt = content.replace(url, "")
+        content = get_youtube_transcript(url)
+        content = f"{prompt} {content}"
     elif type == "webpage":
-        subject, html = sum_webpage_url(content)
-        return subject, html
-    else:
-        html = get_summarized(content)
-        subject = content.split("\n")[0]
-        return subject, html
+        url = re.findall(r"(https?://\S+)", content)[0]
+        prompt = content.replace(url, "")
+        subject, content = download_html(url)
+        content = f"{prompt} {content}"
+
+    content = get_assistant(content, command)
+    return subject, content
 
 
 # TODO: NOT SUPPORTED YET
 def book(url):
     raise ValueError("Not supported yet")
-    # subject = get_pagetitle(url, "")
-    # html = f"<html>NOT SUPPORTED YET</html>"
-    # return subject, html
 
 
 def add_webpage_url(url):
-    html = download_html(url)
-    subject = get_pagetitle(url, html)
-    return subject, f"{html}<br><a href='{url}'>URL: {url}</a>"
+    subject, html = download_html(url)
+    return subject, f"{html}{add_html_hyperlist(url)}"
 
 
 def add_twitter_thread_url(url):
     # convert twitter url to threadreaderapp url
     twit_id = url.split("/")[-1]
     url = f"https://threadreaderapp.com/thread/{twit_id}"
-    html = download_html(url)
-    html = f"<html>{html}<a href='{url}'>URL: {url}</a></html>"
-    subject = get_pagetitle(url, html)
-    return "[TWT]" + subject, html
+    subject, html = download_html(url)
+    soup = BeautifulSoup(html, "html.parser")
+    div = soup.find("div", {"class": "hide-mentions"})
+
+    html = f"<html>{div}</html>"
+    return subject, html
 
 
 def add_youtube_url(url):
@@ -111,33 +117,7 @@ def add_youtube_url(url):
     return subject, html
 
 
-def sum_youtube_url(url):
-    transcript = get_youtube_transcript(url)
-    if "Error:" not in transcript:
-        transcript = get_summarized(transcript)
-    html = f"<html><a href='{url}'>URL: {url}</a><br>{transcript}</html>"
-    subject = get_pagetitle(url, "")
-    return "[SUM]" + subject, html
-
-
-def sum_webpage_url(url):
-    html = download_html(url)
-    body = html.split("<body>")[1].split("</body>")[0]
-    # remove all the svg, img, script, style, link, meta, noscript
-    body = re.sub(r"<svg.*?</svg>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<img.*?>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<script.*?</script>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<style.*?</style>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<link.*?>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<meta.*?>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<noscript.*?</noscript>", "", body, flags=re.DOTALL)
-    body = get_summarized(body)
-    subject = get_pagetitle(url, html)
-    return "[SUM]" + subject, f"<html><a href='{url}'>URL: {url}</a><br>{body}</html>"
-
-
 def content_type(content):
-    # url is from youtube or not
     if "youtu.be" in content or "youtube.com" in content:
         return "youtube"
     elif "twitter.com" in content:
@@ -146,6 +126,8 @@ def content_type(content):
     elif re.match(r"^https?://", content):
         return "webpage"
     else:
+        global _url
+        _url = "No URL found"
         return "text"
 
 
@@ -159,15 +141,30 @@ def get_pagetitle(url, html):
 
 
 def download_html(url):
-    return requests.get(url).text
+    html = requests.get(url).text
+    subject = get_pagetitle(url, html)
+    body = html.split("<body>")[1].split("</body>")[0]
+    # remove all the svg, img, script, style, link, meta, noscript
+    body = re.sub(r"<svg.*?</svg>", "", body, flags=re.DOTALL)
+    body = re.sub(r"<img.*?>", "", body, flags=re.DOTALL)
+    body = re.sub(r"<script.*?</script>", "", body, flags=re.DOTALL)
+    body = re.sub(r"<style.*?</style>", "", body, flags=re.DOTALL)
+    body = re.sub(r"<link.*?>", "", body, flags=re.DOTALL)
+    body = re.sub(r"<meta.*?>", "", body, flags=re.DOTALL)
+    body = re.sub(r"<noscript.*?</noscript>", "", body, flags=re.DOTALL)
+    return subject, subject
 
 
-def get_summarized(text, openai_api_key: str = ""):
+def add_html_hyperlist(link):
+    return f"<br><br><a href='{link}'>URL: {link}</a>"
+
+
+def get_assistant(text, command, openai_api_key: str = ""):
     if openai_api_key == "":
         global openapi_key
         openai_api_key = openapi_key
     openai_helper = OpenAIHelper(openai_api_key)
-    return openai_helper.get_summary(text)
+    return openai_helper.chat(text, command)
 
 
 def get_youtube_transcript(url):
@@ -197,17 +194,23 @@ class OpenAIHelper:
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant to help you create TLDR summaries of content from various sources like books, webpage articles, and YouTube transcripts."
+                    "You are a helpful text analysis assistant, analyzing content from various sources like books, webpage articles, and YouTube transcripts."
                 ),
             },
         ]
 
-    def get_user_prompt(self, content: str):
-        return {"role": "user", "content": (f"Create a TLDR summary for the following content, capturing all important information: {content}")}
+    def get_user_prompt_tldr(self, content: str):
+        return {"role": "user", "content": (f"Create a TLDR summary for the following content, capturing all important information in the original text language: {content}")}
 
-    def get_summary(self, text):
+    def get_user_prompt_ask(self, content: str):
+        return {"role": "user", "content": (f"Answer my question: {content}")}
+
+    def chat(self, text, command):
         prompt = self.get_system_prompt()
-        prompt.append(self.get_user_prompt(text))
+        if command == "/sum" or command == "/tldr":
+            prompt.append(self.get_user_prompt_tldr(text))
+        else:
+            prompt.append(self.get_user_prompt_ask(text))
         response = self.call_chatgpt(prompt)
         return response.choices[0].message.content
 

@@ -1,1 +1,2 @@
 youtube-transcript-api
+beautifulsoup4
