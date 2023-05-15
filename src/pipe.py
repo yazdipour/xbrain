@@ -8,6 +8,9 @@ import requests
 import openai
 from bs4 import BeautifulSoup
 
+MSG_URL = ""
+MAX_LENGTH = 4000*4
+
 
 def handler(pd: "pipedream"):
     event = pd.steps["trigger"]["event"]["message"]
@@ -25,9 +28,6 @@ def handler(pd: "pipedream"):
     }
 
 
-_url = ""
-
-
 def create_content(user_msg):
     # check if the user_msg starts with a command '/'
     if user_msg[0] == "/":
@@ -40,8 +40,8 @@ def create_content(user_msg):
         raise ValueError("Content is empty")
 
     # content is the url unless it is a text
-    global _url
-    _url = content
+    global MSG_URL
+    MSG_URL = content
     if command == "/sum" or command == "/tldr" or command == "/ask":
         subject, html = gpt(command, content)
     elif command == "/book":
@@ -52,18 +52,18 @@ def create_content(user_msg):
         if command != "/add":
             content = f"{command} {content}"
         subject, html = add(content)
-    return subject, _url, html
+    return subject, MSG_URL, html
 
 
 def add(content):
     type = get_content_type(content)
     if type == "youtube":
-        return add_youtube_url(content)
+        subject, html = add_youtube_url(content)
     elif type == "webpage":
-        return add_webpage_url(content)
+        subject, html = add_webpage_url(content)
     else:
         subject = content.split("\n")[0]
-        return subject, f"<html>{content}</html>"
+    return subject, html
 
 
 def gpt(command, content):
@@ -119,12 +119,16 @@ def get_content_type(content):
     elif re.match(r"^https?://", content):
         return "webpage"
     else:
-        global _url
-        _url = "No URL found"
+        global MSG_URL
+        MSG_URL = "No URL found"
         return "text"
 
 
 def get_assistant(text, command, openai_api_key: str = ""):
+    if len(text) > MAX_LENGTH:
+        print(f"WARNING: Content is too long. Length: {len(text)}")
+        text = text[:MAX_LENGTH]
+
     if openai_api_key == "":
         global openapi_key
         openai_api_key = openapi_key
@@ -139,7 +143,7 @@ class HtmlHelper:
         else:
             return html.split("<title>")[1].split("</title>")[0]
 
-    def add_html_hyperlist(link):
+    def add_html_hyperlist(self, link):
         return f"<br><br><a href='{link}'>URL: {link}</a><br><br>"
 
     def download_html(self, url):
@@ -180,7 +184,7 @@ class OpenAIHelper:
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful text analysis assistant, analyzing content from various sources like books, webpage articles, and YouTube transcripts."
+                    "As a text analysis assistant, analyzing content from various articles."
                 ),
             },
         ]
@@ -189,7 +193,7 @@ class OpenAIHelper:
         return {
             "role": "user",
             "content": (
-                f"Create a TLDR summary for the following content, capturing all important information in the original text language: {content}"
+                f"In the same language, write TLDR, in {MAX_LENGTH} characters or less, capturing all important details, if necessary include points in a list: {content}"
             ),
         }
 
