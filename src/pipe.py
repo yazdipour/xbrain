@@ -8,8 +8,6 @@ import requests
 import openai
 from bs4 import BeautifulSoup
 
-_url = ""
-
 
 def handler(pd: "pipedream"):
     event = pd.steps["trigger"]["event"]["message"]
@@ -23,18 +21,21 @@ def handler(pd: "pipedream"):
         "subject": f"[XBrain] {subject}",
         "text": f"Text: [XBrain] {subject}",
         "url": _url,
-        "html": html,
+        "html": f"<html>{html}</html>",
     }
+
+
+_url = ""
 
 
 def create_content(user_msg):
     # check if the user_msg starts with a command '/'
-    if user_msg[0] != "/":
-        command = "/add"
-        content = user_msg
-    else:
+    if user_msg[0] == "/":
         command = user_msg.split(" ")[0]
         content = " ".join(user_msg.split(" ")[1:])
+    else:
+        command = "/add"
+        content = user_msg
     if content == "":
         raise ValueError("Content is empty")
 
@@ -44,8 +45,8 @@ def create_content(user_msg):
     if command == "/sum" or command == "/tldr" or command == "/ask":
         subject, html = gpt(command, content)
     elif command == "/book":
-        subject, html = book(content)
-    if command == "/thread":
+        raise ValueError("Not supported yet")
+    elif command == "/thread":
         subject, html = add_twitter_thread_url(content)
     else:
         if command != "/add":
@@ -55,20 +56,18 @@ def create_content(user_msg):
 
 
 def add(content):
-    type = content_type(content)
+    type = get_content_type(content)
     if type == "youtube":
-        subject, html = add_youtube_url(content)
-        return subject, html
+        return add_youtube_url(content)
     elif type == "webpage":
-        subject, html = add_webpage_url(content)
-        return subject, html
+        return add_webpage_url(content)
     else:
         subject = content.split("\n")[0]
         return subject, f"<html>{content}</html>"
 
 
 def gpt(command, content):
-    type = content_type(content)
+    type = get_content_type(content)
     subject = content.split("\n")[0]
 
     if type == "youtube":
@@ -76,48 +75,42 @@ def gpt(command, content):
         # seperate the youtube url and text using regex
         url = re.findall(r"(https?://\S+)", content)[0]
         prompt = content.replace(url, "")
-        content = get_youtube_transcript(url)
+        content = YoutubeTranscriptApiHelper().get_transcript(url)
         content = f"{prompt} {content}"
     elif type == "webpage":
         url = re.findall(r"(https?://\S+)", content)[0]
         prompt = content.replace(url, "")
-        subject, content = download_html(url)
+        subject, content = HtmlHelper().download_html(url)
         content = f"{prompt} {content}"
 
     content = get_assistant(content, command)
     return subject, content
 
 
-# TODO: NOT SUPPORTED YET
-def book(url):
-    raise ValueError("Not supported yet")
-
-
 def add_webpage_url(url):
-    subject, html = download_html(url)
-    return subject, f"{html}{add_html_hyperlist(url)}"
+    htmlHelper = HtmlHelper()
+    subject, html = htmlHelper.download_html(url)
+    return subject, f"{html}{htmlHelper.add_html_hyperlist(url)}"
 
 
 def add_twitter_thread_url(url):
     # convert twitter url to threadreaderapp url
     twit_id = url.split("/")[-1]
     url = f"https://threadreaderapp.com/thread/{twit_id}"
-    subject, html = download_html(url)
+    subject, html = HtmlHelper().download_html(url)
     soup = BeautifulSoup(html, "html.parser")
     div = soup.find("div", {"class": "hide-mentions"})
-
-    html = f"<html>{div}</html>"
-    return subject, html
+    return subject, f"{div}"
 
 
 def add_youtube_url(url):
-    subject = get_pagetitle(url, "")
-    transcript = get_youtube_transcript(url)
-    html = f"<html><br>{transcript}<a href='{url}'>URL: {url}</a></html>"
-    return subject, html
+    htmlHelper = HtmlHelper()
+    subject = htmlHelper.get_pagetitle(url)
+    transcript = YoutubeTranscriptApiHelper().get_transcript(url)
+    return subject, f"{htmlHelper.add_html_hyperlist(url)}{transcript}"
 
 
-def content_type(content):
+def get_content_type(content):
     if "youtu.be" in content or "youtube.com" in content:
         return "youtube"
     elif "twitter.com" in content:
@@ -131,34 +124,6 @@ def content_type(content):
         return "text"
 
 
-def get_pagetitle(url, html):
-    # html is empty or does not contain title
-    if html == "" or "<title>" not in html:
-        title = url
-    else:
-        title = html.split("<title>")[1].split("</title>")[0]
-    return title
-
-
-def download_html(url):
-    html = requests.get(url).text
-    subject = get_pagetitle(url, html)
-    body = html.split("<body>")[1].split("</body>")[0]
-    # remove all the svg, img, script, style, link, meta, noscript
-    body = re.sub(r"<svg.*?</svg>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<img.*?>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<script.*?</script>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<style.*?</style>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<link.*?>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<meta.*?>", "", body, flags=re.DOTALL)
-    body = re.sub(r"<noscript.*?</noscript>", "", body, flags=re.DOTALL)
-    return subject, subject
-
-
-def add_html_hyperlist(link):
-    return f"<br><br><a href='{link}'>URL: {link}</a>"
-
-
 def get_assistant(text, command, openai_api_key: str = ""):
     if openai_api_key == "":
         global openapi_key
@@ -167,8 +132,29 @@ def get_assistant(text, command, openai_api_key: str = ""):
     return openai_helper.chat(text, command)
 
 
-def get_youtube_transcript(url):
-    return YoutubeTranscriptApiHelper().get_transcript(url)
+class HtmlHelper:
+    def get_pagetitle(self, url, html=""):
+        if html == "" or "<title>" not in html:
+            return url
+        else:
+            return html.split("<title>")[1].split("</title>")[0]
+
+    def add_html_hyperlist(link):
+        return f"<br><br><a href='{link}'>URL: {link}</a><br><br>"
+
+    def download_html(self, url):
+        html = requests.get(url).text
+        subject = self.get_pagetitle(url, html)
+        body = html.split("<body>")[1].split("</body>")[0]
+        # remove all the svg, img, script, style, link, meta, noscript
+        body = re.sub(r"<svg.*?</svg>", "", body, flags=re.DOTALL)
+        body = re.sub(r"<img.*?>", "", body, flags=re.DOTALL)
+        body = re.sub(r"<script.*?</script>", "", body, flags=re.DOTALL)
+        body = re.sub(r"<style.*?</style>", "", body, flags=re.DOTALL)
+        body = re.sub(r"<link.*?>", "", body, flags=re.DOTALL)
+        body = re.sub(r"<meta.*?>", "", body, flags=re.DOTALL)
+        body = re.sub(r"<noscript.*?</noscript>", "", body, flags=re.DOTALL)
+        return subject, body
 
 
 class OpenAIHelper:
@@ -200,7 +186,12 @@ class OpenAIHelper:
         ]
 
     def get_user_prompt_tldr(self, content: str):
-        return {"role": "user", "content": (f"Create a TLDR summary for the following content, capturing all important information in the original text language: {content}")}
+        return {
+            "role": "user",
+            "content": (
+                f"Create a TLDR summary for the following content, capturing all important information in the original text language: {content}"
+            ),
+        }
 
     def get_user_prompt_ask(self, content: str):
         return {"role": "user", "content": (f"Answer my question: {content}")}
