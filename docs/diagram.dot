@@ -27,5 +27,5 @@ digraph MessageFlow {
     TelegramServer -> pipeTelegram;  
     OpenAI -> pipeEmail;
     
-    pipeEmail -> "InstaPaper/Pocket/Matter" [label="HTML"];
+    pipeEmail -> "Omnivore" [label="HTML"];
 }

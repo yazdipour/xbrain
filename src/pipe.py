@@ -26,7 +26,7 @@ def handler(pd: "pipedream"):
     html = f"<html><body>{html}</body></html>"
 
     return {
-        "subject": f"[XB] {subject}",
+        "subject": subject,
         "text": subject,
         "url": _url,
         "html": html,
@@ -66,7 +66,10 @@ def add(content):
     if type == "youtube":
         subject, html = add_youtube_url(content)
     elif type == "webpage":
-        subject, html = add_webpage_url(content)
+        # subject, html = add_webpage_url(content)
+        # Emailing url to omnivore will automatically add the content
+        subject = content  # subject is the url
+        html = ""
     else:
         subject = content.split("\n")[0]
         html = content
@@ -120,9 +123,6 @@ def add_youtube_url(url):
 def get_content_type(content):
     if "youtu.be" in content or "youtube.com" in content:
         return "youtube"
-    elif "twitter.com" in content:
-        return "twitter"
-        # starts with http or https
     elif re.match(r"^https?://", content):
         return "webpage"
     else:
@@ -165,7 +165,8 @@ class HtmlHelper:
             body = re.sub(r"<style.*?</style>", "", body, flags=re.DOTALL)
             body = re.sub(r"<link.*?>", "", body, flags=re.DOTALL)
             body = re.sub(r"<meta.*?>", "", body, flags=re.DOTALL)
-            body = re.sub(r"<noscript.*?</noscript>", "", body, flags=re.DOTALL)
+            body = re.sub(r"<noscript.*?</noscript>",
+                          "", body, flags=re.DOTALL)
             return subject, body
         except Exception as e:
             print(f"ERROR: {e}")

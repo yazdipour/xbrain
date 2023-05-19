@@ -2,6 +2,8 @@
 
 <img src="logo.jpg" height="240"/>
 
+Telegram bot to help you read and summarize content. It uses [Omnivore](https://Omnivore.app) [or Pocket, Instapaper, Matter] to save the content and [OpenAI](https://openai.com) to summarize it.
+
 ## Features
 
 * Message Template: `/command [args: URL or text]`
