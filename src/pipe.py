@@ -1,5 +1,6 @@
 # pipedream add-package youtube-transcript-api
 # pipedream add-package beautifulsoup4
+# pipedream add-package html2text
 
 from typing import List, Dict
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -7,9 +8,10 @@ import re
 import requests
 import openai
 from bs4 import BeautifulSoup
+import html2text
 
 MSG_URL = ""
-MAX_LENGTH = 4000*4
+MAX_LENGTH = 4000 * 4
 
 
 def handler(pd: "pipedream"):
@@ -20,11 +22,15 @@ def handler(pd: "pipedream"):
         raise ValueError("Not authorized")
     msg = event["text"]
     subject, _url, html = create_content(msg)
+    html = html.replace("\n", "<br>")
+    html = f"<html><body>{html}</body></html>"
+
     return {
-        "subject": f"[XBrain] {subject}",
-        "text": f"Text: [XBrain] {subject}",
+        "subject": f"[XB] {subject}",
+        "text": subject,
         "url": _url,
-        "html": f"<html>{html}</html>",
+        "html": html,
+        "markdown": html2text.HTML2Text().handle(html),
     }
 
 
@@ -63,6 +69,7 @@ def add(content):
         subject, html = add_webpage_url(content)
     else:
         subject = content.split("\n")[0]
+        html = content
     return subject, html
 
 
@@ -147,18 +154,22 @@ class HtmlHelper:
         return f"<br><br><a href='{link}'>URL: {link}</a><br><br>"
 
     def download_html(self, url):
-        html = requests.get(url).text
-        subject = self.get_pagetitle(url, html)
-        body = html.split("<body>")[1].split("</body>")[0]
-        # remove all the svg, img, script, style, link, meta, noscript
-        body = re.sub(r"<svg.*?</svg>", "", body, flags=re.DOTALL)
-        body = re.sub(r"<img.*?>", "", body, flags=re.DOTALL)
-        body = re.sub(r"<script.*?</script>", "", body, flags=re.DOTALL)
-        body = re.sub(r"<style.*?</style>", "", body, flags=re.DOTALL)
-        body = re.sub(r"<link.*?>", "", body, flags=re.DOTALL)
-        body = re.sub(r"<meta.*?>", "", body, flags=re.DOTALL)
-        body = re.sub(r"<noscript.*?</noscript>", "", body, flags=re.DOTALL)
-        return subject, body
+        try:
+            html = requests.get(url).text
+            subject = self.get_pagetitle(url, html)
+            body = html.split("<body>")[1].split("</body>")[0]
+            # remove all the svg, img, script, style, link, meta, noscript
+            body = re.sub(r"<svg.*?</svg>", "", body, flags=re.DOTALL)
+            body = re.sub(r"<img.*?>", "", body, flags=re.DOTALL)
+            body = re.sub(r"<script.*?</script>", "", body, flags=re.DOTALL)
+            body = re.sub(r"<style.*?</style>", "", body, flags=re.DOTALL)
+            body = re.sub(r"<link.*?>", "", body, flags=re.DOTALL)
+            body = re.sub(r"<meta.*?>", "", body, flags=re.DOTALL)
+            body = re.sub(r"<noscript.*?</noscript>", "", body, flags=re.DOTALL)
+            return subject, body
+        except Exception as e:
+            print(f"ERROR: {e}")
+            return url, "ERROR: Unable to download the webpage."
 
 
 class OpenAIHelper:
