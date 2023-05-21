@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 import html2text
 
 MSG_URL = ""
-MAX_LENGTH = 4000 * 4
+MAX_LENGTH = int(4000 * 2.5)
 
 
 def handler(pd: "pipedream"):
@@ -205,7 +205,7 @@ class OpenAIHelper:
         return {
             "role": "user",
             "content": (
-                f"In the same language, write TLDR, in {MAX_LENGTH} characters or less, capturing all important details, if necessary include points in a list: {content}"
+                f"In the same language, write TLDR, in {MAX_LENGTH} characters or less, capturing all important details:\n```{content}```"
             ),
         }
 
