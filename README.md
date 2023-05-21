@@ -17,10 +17,8 @@ Telegram bot to help you read and summarize content. It uses [Omnivore](https://
 
 ## TODO
 
-* [ ] /ask command
 * [ ] Book Reader!
-* [ ] Set Token limit
-* [ ] OpenAI Token Getter
+* [ ] OpenAI Token Getter (Now it check if it is me, it will allow openAI usage)
 
 ## AppDiagram
 
