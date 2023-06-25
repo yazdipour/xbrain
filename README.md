@@ -20,10 +20,32 @@ Telegram bot to help you read and summarize content. It uses [Omnivore](https://
 * [ ] Book Reader!
 * [ ] OpenAI Token Getter (Now it check if it is me, it will allow openAI usage)
 
-## Pipedream
-
-![image](https://github.com/yazdipour/xbrain/assets/8194807/da63d7cd-51f9-4d6a-bfa3-984cf5fd3bdc)
-
 ## AppDiagram
 
-![xbrain diagram](docs/diagram.png)
+```mermaid
+graph TB
+  User -->|message| TelegramServer
+  subgraph "PipeDream Service";
+
+    pipeTelegram --> checkType
+    checkType -->|youtube| GetTranscript
+    checkType -->|URL| GetHTML
+    checkType -->|text| PipePython
+
+    GetHTML --> PipePython
+    GetTranscript --> PipePython
+    PipePython --> checkCommand
+    checkCommand -->|/add| pipeEmail
+  end
+  
+  OpenAI([OpenAI])
+  checkCommand -->|/sum| OpenAI
+  checkCommand -->|/ask| OpenAI
+  TelegramServer --> pipeTelegram
+  OpenAI --> pipeEmail
+  pipeEmail -->|HTML| Omnivore
+```
+
+## Pipedream setup
+
+![image](https://github.com/yazdipour/xbrain/assets/8194807/da63d7cd-51f9-4d6a-bfa3-984cf5fd3bdc)
