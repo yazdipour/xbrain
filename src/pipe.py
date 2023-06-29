@@ -2,7 +2,7 @@
 # pipedream add-package beautifulsoup4
 # pipedream add-package html2text
 
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from youtube_transcript_api import YouTubeTranscriptApi
 import re
 import requests
@@ -10,16 +10,16 @@ import openai
 from bs4 import BeautifulSoup
 import html2text
 
-MSG_URL = ""
 MAX_LENGTH = int(4000 * 2.5)
+TELEGRAM_USER_ID = "MY_TELEGRAM_USER_ID"
 
 
 def handler(pd: "pipedream"):
     event = pd.steps["trigger"]["event"]["message"]
-    global openapi_key
-    openapi_key = pd.inputs["openai"]["$auth"]["api_key"]
-    if event["from"]["username"] != "theshahriar":
-        raise ValueError("Not authorized")
+    if event["from"]["username"] != TELEGRAM_USER_ID: # Check if the user is me or not!
+        raise ValueError("Not authorized!")
+    global openai_api_key
+    openai_api_key = pd.inputs["openai"]["$auth"]["api_key"]
     msg = event["text"]
     subject, _url, html = create_content(msg)
     html = html.replace("\n", "<br>")
@@ -34,24 +34,22 @@ def handler(pd: "pipedream"):
     }
 
 
-def create_content(user_msg):
+def create_content(user_msg: str) -> Tuple[str, str, str]:
     # check if the user_msg starts with a command '/'
     if user_msg[0] == "/":
-        command = user_msg.split(" ")[0]
-        content = " ".join(user_msg.split(" ")[1:])
+        command, *content = user_msg.split(" ")
+        content = " ".join(content)
     else:
         command = "/add"
         content = user_msg
-    if content == "":
+    if not content:
         raise ValueError("Content is empty")
 
     # content is the url unless it is a text
     global MSG_URL
     MSG_URL = content
-    if command == "/sum" or command == "/tldr" or command == "/ask":
+    if command in ("/sum", "/tldr", "/ask"):
         subject, html = gpt(command, content)
-    elif command == "/book":
-        raise ValueError("Not supported yet")
     elif command == "/thread":
         subject, html = add_twitter_thread_url(content)
     else:
@@ -61,28 +59,25 @@ def create_content(user_msg):
     return subject, MSG_URL, html
 
 
-def add(content):
+def add(content: str) -> Tuple[str, str]:
     type = get_content_type(content)
     if type == "youtube":
         subject, html = add_youtube_url(content)
     elif type == "webpage":
-        # subject, html = add_webpage_url(content)
         # Emailing url to omnivore will automatically add the content
         subject = content  # subject is the url
         html = ""
     else:
-        subject = content.split("\n")[0]
-        html = content
+        subject, *_, html = content.split("\n")
+        html = "\n".join(html)
     return subject, html
 
 
-def gpt(command, content):
+def gpt(command: str, content: str) -> Tuple[str, str]:
     type = get_content_type(content)
     subject = content.split("\n")[0]
 
     if type == "youtube":
-        # content is combination of youtube url and text or just youtube url
-        # seperate the youtube url and text using regex
         url = re.findall(r"(https?://\S+)", content)[0]
         prompt = content.replace(url, "")
         content = YoutubeTranscriptApiHelper().get_transcript(url)
@@ -93,17 +88,16 @@ def gpt(command, content):
         subject, content = HtmlHelper().download_html(url)
         content = f"{prompt} {content}"
 
-    content = get_assistant(content, command)
-    return subject, content
+    return subject, get_assistant(content, command)
 
 
-def add_webpage_url(url):
+def add_webpage_url(url: str) -> Tuple[str, str]:
     htmlHelper = HtmlHelper()
     subject, html = htmlHelper.download_html(url)
     return subject, f"{html}{htmlHelper.add_html_hyperlist(url)}"
 
 
-def add_twitter_thread_url(url):
+def add_twitter_thread_url(url: str) -> Tuple[str, str]:
     # convert twitter url to threadreaderapp url
     twit_id = url.split("/")[-1]
     url = f"https://threadreaderapp.com/thread/{twit_id}"
@@ -113,14 +107,14 @@ def add_twitter_thread_url(url):
     return subject, f"{div}"
 
 
-def add_youtube_url(url):
+def add_youtube_url(url: str) -> Tuple[str, str]:
     htmlHelper = HtmlHelper()
     subject = htmlHelper.get_pagetitle(url)
     transcript = YoutubeTranscriptApiHelper().get_transcript(url)
     return subject, f"{htmlHelper.add_html_hyperlist(url)}{transcript}"
 
 
-def get_content_type(content):
+def get_content_type(content: str) -> str:
     if "youtu.be" in content or "youtube.com" in content:
         return "youtube"
     elif re.match(r"^https?://", content):
@@ -131,18 +125,20 @@ def get_content_type(content):
         return "text"
 
 
-def get_assistant(text, command, openai_api_key: str = ""):
+def get_assistant(text: str, command: str, openapi_token: str = "") -> str:
     if len(text) > MAX_LENGTH:
         print(f"WARNING: Content is too long. Length: {len(text)}")
         text = text[:MAX_LENGTH]
 
-    if openai_api_key == "":
-        global openapi_key
-        openai_api_key = openapi_key
-    openai_helper = OpenAIHelper(openai_api_key)
+    if openapi_token == "":
+        global openai_api_key
+        openapi_token = openai_api_key
+    openai_helper = OpenAIHelper(openapi_token)
     return openai_helper.chat(text, command)
 
-
+# =========================================================================================================
+# ====================================            HtmlHelper           ====================================
+# =========================================================================================================
 class HtmlHelper:
     def get_pagetitle(self, url, html=""):
         if html == "" or "<title>" not in html:
@@ -172,7 +168,9 @@ class HtmlHelper:
             print(f"ERROR: {e}")
             return url, "ERROR: Unable to download the webpage."
 
-
+# =========================================================================================================
+# ====================================            OpenAIHelper           ==================================
+# =========================================================================================================
 class OpenAIHelper:
     def __init__(self, api_key):
         self.api_key = api_key
@@ -221,7 +219,9 @@ class OpenAIHelper:
         response = self.call_chatgpt(prompt)
         return response.choices[0].message.content
 
-
+# =========================================================================================================
+# ==============================            YoutubeTranscriptApiHelper           ==========================
+# =========================================================================================================
 class YoutubeTranscriptApiHelper:
     def get_video_id_from_url(self, url):
         video_id = None
