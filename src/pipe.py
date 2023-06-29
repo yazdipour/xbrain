@@ -61,6 +61,7 @@ def add(content: str) -> Tuple[str, str]:
     type = get_content_type(content)
     if type == "youtube":
         subject, html = add_youtube_url(content)
+        subject = f"XBrian: {subject}"
     elif type == "webpage":
         # Emailing url to omnivore will automatically add the content
         subject = content  # subject is the url
@@ -78,12 +79,14 @@ def gpt(command: str, content: str) -> Tuple[str, str]:
     if type == "youtube":
         url = re.findall(r"(https?://\S+)", content)[0]
         prompt = content.replace(url, "")
+        subject = f"XBrian: {subject}"
         content = YoutubeTranscriptApiHelper().get_transcript(url)
         content = f"{prompt} {content}"
     elif type == "webpage":
         url = re.findall(r"(https?://\S+)", content)[0]
         prompt = content.replace(url, "")
         subject, content = HtmlHelper().download_html(url)
+        subject = f"XBrian: {subject}"
         content = f"{prompt} {content}"
 
     return subject, get_assistant(content, command)
