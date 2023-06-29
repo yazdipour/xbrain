@@ -1,2 +1,3 @@
 youtube-transcript-api
 beautifulsoup4
+html2text
