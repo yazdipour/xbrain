@@ -50,8 +50,6 @@ def create_content(user_msg: str) -> Tuple[str, str, str]:
     MSG_URL = content
     if command in ("/sum", "/tldr", "/ask"):
         subject, html = gpt(command, content)
-    elif command == "/thread":
-        subject, html = add_twitter_thread_url(content)
     else:
         if command != "/add":
             content = f"{command} {content}"
@@ -95,16 +93,6 @@ def add_webpage_url(url: str) -> Tuple[str, str]:
     htmlHelper = HtmlHelper()
     subject, html = htmlHelper.download_html(url)
     return subject, f"{html}{htmlHelper.add_html_hyperlist(url)}"
-
-
-def add_twitter_thread_url(url: str) -> Tuple[str, str]:
-    # convert twitter url to threadreaderapp url
-    twit_id = url.split("/")[-1]
-    url = f"https://threadreaderapp.com/thread/{twit_id}"
-    subject, html = HtmlHelper().download_html(url)
-    soup = BeautifulSoup(html, "html.parser")
-    div = soup.find("div", {"class": "hide-mentions"})
-    return subject, f"{div}"
 
 
 def add_youtube_url(url: str) -> Tuple[str, str]:
