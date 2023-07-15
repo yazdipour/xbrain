@@ -16,9 +16,11 @@ Telegram bot to help you read and summarize the content. It uses [Omnivore](http
 
 ## TODO
 
-* [ ] OpenAI Token Getter (Now it checks if it is me, it will allow OpenAI usage)
+* [ ] This sends the content to the pipedream user email. Find a way to make it general.
 
 ## AppDiagram
+
+Copy the Pipedream diagram for yours: <https://pipedream.com/new?h=tch_3M9fP9>
 
 ```mermaid
 graph TB

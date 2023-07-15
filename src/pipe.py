@@ -7,20 +7,31 @@ from youtube_transcript_api import YouTubeTranscriptApi
 import re
 import requests
 import openai
-from bs4 import BeautifulSoup
 import html2text
 
 MAX_LENGTH = int(4000 * 2.5)
-TELEGRAM_USER_ID = "MY_TELEGRAM_USER_ID"
 
 
 def handler(pd: "pipedream"):
     event = pd.steps["trigger"]["event"]["message"]
-    if event["from"]["username"] != TELEGRAM_USER_ID: # Check if the user is me or not!
-        raise ValueError("Not authorized!")
-    global openai_api_key
-    openai_api_key = pd.inputs["openai"]["$auth"]["api_key"]
+    telegram_user_id = str(event["from"]["id"])
     msg = event["text"]
+    if msg[:6] == "\\token":
+        save_token(pd, telegram_user_id, msg[7:].strip())
+        return {
+            "status": 400,
+            "message": "OpenAI API token registered!"
+        }
+    global openai_api_key
+    try:
+        openai_api_key = get_token(pd, telegram_user_id)
+        if openai_api_key == "":
+            raise ValueError
+    except:
+        return {
+            "status": 400,
+            "message": "Please register your OpenAI API key with \\token [OPENAI_TOKEN]."
+        }
     subject, _url, html = create_content(msg)
     html = html.replace("\n", "<br>")
     html = f"<html><body>{html}</body></html>"
@@ -31,7 +42,18 @@ def handler(pd: "pipedream"):
         "url": _url,
         "html": html,
         "markdown": html2text.HTML2Text().handle(html),
+        "status": 200,
+        "message": "Saved on your XBrain!"
     }
+
+
+def save_token(pd, user_id: str, token: str):
+    print(f"Saving token for user {user_id}, token: {token}")
+    pd.inputs["data_store"][user_id] = token
+
+
+def get_token(pd, user_id: str):
+    return pd.inputs["data_store"][user_id]
 
 
 def create_content(user_msg: str) -> Tuple[str, str, str]:
@@ -130,6 +152,8 @@ def get_assistant(text: str, command: str, openapi_token: str = "") -> str:
 # =========================================================================================================
 # ====================================            HtmlHelper           ====================================
 # =========================================================================================================
+
+
 class HtmlHelper:
     def get_pagetitle(self, url, html=""):
         if html == "" or "<title>" not in html:
@@ -162,6 +186,8 @@ class HtmlHelper:
 # =========================================================================================================
 # ====================================            OpenAIHelper           ==================================
 # =========================================================================================================
+
+
 class OpenAIHelper:
     def __init__(self, api_key):
         self.api_key = api_key
@@ -213,6 +239,8 @@ class OpenAIHelper:
 # =========================================================================================================
 # ==============================            YoutubeTranscriptApiHelper           ==========================
 # =========================================================================================================
+
+
 class YoutubeTranscriptApiHelper:
     def get_video_id_from_url(self, url):
         video_id = None
